@@ -1,11 +1,19 @@
 import requests
 import time
 import json
+import os  # 환경 변수를 읽어오기 위한 라이브러리
 
-# 여기에 본인의 API 키를 입력하세요
-API_KEY = "0BB0BCA48D2D46E7BC80A778F5056061"
+# 깃허브 시크릿(금고)에서만 키를 가져옵니다. 
+# 이제 코드 내부에는 그 어떤 키 문자열도 남아있지 않습니다.
+API_KEY = os.environ.get("STEAM_API_KEY")
 
 def get_target_games():
+    # 만약 환경 변수에 키가 세팅되지 않았다면 에러를 내고 안전하게 종료합니다.
+    if not API_KEY:
+        print("[!] 에러: STEAM_API_KEY 환경 변수가 설정되지 않았습니다.")
+        print("[!] 깃허브 Settings -> Secrets에 키를 올바르게 등록했는지 확인하세요.")
+        return
+
     print("1. 현재 동접자 상위 게임 목록 가져오는 중...")
     chart_url = f"https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/?key={API_KEY}"
     res = requests.get(chart_url).json()
@@ -20,24 +28,22 @@ def get_target_games():
     print("2. 멀티플레이/P2P 태그 확인 중 (이 작업은 시간이 좀 걸립니다)...")
     for appid in candidates:
         try:
-            # API 키 없이 상세 정보를 가져오는 공개 엔드포인트 사용 (IP 차단 방지 위해 천천히)
+            # 상세 정보 API 호출
             detail_url = f"https://store.steampowered.com/api/appdetails?appids={appid}"
             data = requests.get(detail_url).json()
             
             if data and data[str(appid)]['success']:
                 app_data = data[str(appid)]['data']
                 name = app_data.get('name')
-                # 카테고리 정보 추출
                 categories = [c['description'] for c in app_data.get('categories', [])]
                 
-                # 사용자가 요청한 키워드 필터링 (멀티플레이, P2P, Co-op 등)
+                # 멀티플레이 관련 키워드 필터링
                 target_keywords = ['Multi-player', 'Online Co-op', 'P2P', 'Co-op', 'Lobby']
                 if any(kw in categories for kw in target_keywords):
                     final_targets.append({"appid": appid, "name": name})
                     print(f"   [+] 타겟 발견: {name} ({appid})")
             
-            # 스팀 서버 차단을 피하기 위한 1초 휴식
-            time.sleep(1)
+            time.sleep(1) # 디도스 오인 방지 지연시간
             
         except Exception as e:
             print(f"   [!] {appid} 처리 중 에러: {e}")
